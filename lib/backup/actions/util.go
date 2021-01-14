@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/VictoriaMetrics/VictoriaMetrics/lib/backup/azureblobremote"
 	"github.com/VictoriaMetrics/VictoriaMetrics/lib/backup/common"
 	"github.com/VictoriaMetrics/VictoriaMetrics/lib/backup/fsremote"
 	"github.com/VictoriaMetrics/VictoriaMetrics/lib/backup/gcsremote"
@@ -21,6 +22,8 @@ var (
 	configProfile = flag.String("configProfile", "", "Profile name for S3 configs. If no set, the value of the environment variable will be loaded (AWS_PROFILE or AWS_DEFAULT_PROFILE), "+
 		"or if both not set, DefaultSharedConfigProfile is used")
 	customS3Endpoint = flag.String("customS3Endpoint", "", "Custom S3 endpoint for use with S3-compatible storages (e.g. MinIO). S3 is used if not set")
+	customAzureStorageAccount = flag.String("customAzureStroageAccount", "", "Custom Azure Storage Account name to use. If not set use AZURE_STORAGE_ACCOUNT ENV")
+	customAzureAccessKey = flag.String("customAzureAccessKey", "", "Custom Azure Access Key to use. If not set use AZURE_STORAGE_ACCESS_KEY")
 )
 
 func runParallel(concurrency int, parts []common.Part, f func(p common.Part) error, progress func(elapsed time.Duration)) error {
@@ -230,6 +233,25 @@ func NewRemoteFS(path string) (common.RemoteFS, error) {
 			return nil, fmt.Errorf("cannot initialize connection to s3: %w", err)
 		}
 		return fs, nil
+	case "azureblob":
+		n := strings.Index(dir, "/")
+		if n < 0 {
+			return nil, fmt.Errorf("missing directory on the s3 bucket %q", dir)
+		}
+		bucket := dir[:n]
+		dir = dir[n:]
+		fs := &azureblobremote.FS{
+
+			Container:  bucket,
+			Dir:	    dir,
+		}
+
+		if err := fs.Init(); err != nil {
+			return nil, fmt.Errorf("cannot initialize connection to azure blob storage: %w", err)
+		}
+		return fs, nil
+
+
 	default:
 		return nil, fmt.Errorf("unsupported scheme %q", scheme)
 	}
